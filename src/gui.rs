@@ -2,23 +2,19 @@ use crate::types::*;
 use crate::steam::SteamScanner;
 use crate::non_steam::NonSteamScanner;
 use crate::backup::{BackupManager, BackupStats};
-use crate::sync::{SyncManager, SyncResult};
 use eframe::egui;
 use log::{error, info, warn};
-use chrono::Utc;
 
 pub struct SaveGuardianApp {
     // Core managers
     steam_scanner: SteamScanner,
     non_steam_scanner: NonSteamScanner,
     backup_manager: Option<BackupManager>,
-    sync_manager: SyncManager,
     
     // Application state
     config: Config,
     steam_saves: Vec<GameSave>,
     non_steam_saves: Vec<GameSave>,
-    sync_pairs: Vec<SyncPair>,
     backups: Vec<BackupInfo>,
     backup_stats: Option<BackupStats>,
     
@@ -26,19 +22,19 @@ pub struct SaveGuardianApp {
     selected_tab: Tab,
     selected_game: Option<usize>,
     selected_backup: Option<usize>,
-    selected_sync_pair: Option<usize>,
     scan_status: ScanStatus,
-    last_sync_result: Option<SyncResult>,
     
     // Dialogs and modals
     show_settings: bool,
     show_backup_dialog: bool,
     show_restore_dialog: bool,
-    show_sync_dialog: bool,
     show_about: bool,
     
     // Settings UI
     temp_config: Config,
+    
+    // Backup dialog state
+    backup_description: String,
     
     // Search and filters
     search_query: String,
@@ -56,7 +52,6 @@ pub struct SaveGuardianApp {
 enum Tab {
     GameSaves,
     Backups,
-    Sync,
     Cloud,
     Settings,
 }
@@ -83,31 +78,26 @@ impl Default for SaveGuardianApp {
         let steam_scanner = SteamScanner::new(config.steam_path.clone());
         let non_steam_scanner = NonSteamScanner::new();
         let backup_manager = BackupManager::new(config.backup_path.clone(), config.backup_retention_days).ok();
-        let sync_manager = SyncManager::new(true); // Enable backup before sync by default
 
         Self {
             steam_scanner,
             non_steam_scanner,
             backup_manager,
-            sync_manager,
             config: config.clone(),
             steam_saves: Vec::new(),
             non_steam_saves: Vec::new(),
-            sync_pairs: Vec::new(),
             backups: Vec::new(),
             backup_stats: None,
             selected_tab: Tab::GameSaves,
             selected_game: None,
             selected_backup: None,
-            selected_sync_pair: None,
             scan_status: ScanStatus::Idle,
-            last_sync_result: None,
             show_settings: false,
             show_backup_dialog: false,
             show_restore_dialog: false,
-            show_sync_dialog: false,
             show_about: false,
             temp_config: config,
+            backup_description: String::new(),
             search_query: String::new(),
             filter_steam: true,
             filter_non_steam: true,
@@ -139,7 +129,6 @@ impl eframe::App for SaveGuardianApp {
             match self.selected_tab {
                 Tab::GameSaves => self.draw_game_saves_tab(ui),
                 Tab::Backups => self.draw_backups_tab(ui),
-                Tab::Sync => self.draw_sync_tab(ui),
                 Tab::Cloud => self.draw_cloud_tab(ui),
                 Tab::Settings => self.draw_settings_tab(ui),
             }
@@ -200,7 +189,6 @@ impl SaveGuardianApp {
             // Tab selection with text-based icons to avoid rendering issues
             ui.selectable_value(&mut self.selected_tab, Tab::GameSaves, egui::RichText::new("▶ Game Saves").size(14.0));
             ui.selectable_value(&mut self.selected_tab, Tab::Backups, egui::RichText::new("💾 Backups").size(14.0));
-            ui.selectable_value(&mut self.selected_tab, Tab::Sync, egui::RichText::new("⟲ Sync").size(14.0));
             ui.selectable_value(&mut self.selected_tab, Tab::Cloud, egui::RichText::new("☁ Cloud").size(14.0));
             ui.selectable_value(&mut self.selected_tab, Tab::Settings, egui::RichText::new("⚙ Settings").size(14.0));
             
@@ -545,101 +533,6 @@ impl SaveGuardianApp {
         });
     }
 
-    fn draw_sync_tab(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.heading("🔄 Save Synchronization");
-            
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("⌕ Find Pairs").clicked() {
-                    self.sync_pairs = self.sync_manager.find_sync_pairs(&self.steam_saves, &self.non_steam_saves);
-                    self.scan_status = ScanStatus::Complete(format!("Found {} sync pairs", self.sync_pairs.len()));
-                }
-            });
-        });
-
-        ui.separator();
-
-        // Sync pairs list
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("sync_grid")
-                .num_columns(5)
-                .spacing([10.0, 4.0])
-                .striped(true)
-                .show(ui, |ui| {
-                    // Header
-                    ui.strong("Game");
-                    ui.strong("Steam Save");
-                    ui.strong("Non-Steam Save");
-                    ui.strong("Last Synced");
-                    ui.strong("Actions");
-                    ui.end_row();
-
-                    for (i, pair) in self.sync_pairs.iter().enumerate() {
-                        // Game name
-                        ui.label(&pair.game_name);
-
-                        // Steam save status with better icons
-                        match &pair.steam_save {
-                            Some(_save) => {
-                                ui.colored_label(egui::Color32::from_rgb(46, 204, 64), "🔵 Available");
-                            }
-                            None => {
-                                ui.colored_label(egui::Color32::from_rgb(255, 133, 27), "⚫ Missing");
-                            }
-                        }
-
-                        // Non-Steam save status with better icons
-                        match &pair.non_steam_save {
-                            Some(_save) => {
-                                ui.colored_label(egui::Color32::from_rgb(46, 204, 64), "🟢 Available");
-                            }
-                            None => {
-                                ui.colored_label(egui::Color32::from_rgb(255, 133, 27), "⚫ Missing");
-                            }
-                        }
-
-                        // Last synced
-                        let last_sync = pair.last_synced
-                            .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-                            .unwrap_or_else(|| "Never".to_string());
-                        ui.label(last_sync);
-
-                        // Actions
-                        ui.horizontal(|ui| {
-                            if pair.steam_save.is_some() && pair.non_steam_save.is_some() {
-                                if ui.button("⟲ Sync").clicked() {
-                                    self.selected_sync_pair = Some(i);
-                                    self.show_sync_dialog = true;
-                                }
-                            }
-                            
-                            if pair.steam_save.is_some() && pair.non_steam_save.is_none() {
-                                ui.colored_label(egui::Color32::YELLOW, "Need non-Steam location");
-                            }
-                            
-                            if pair.non_steam_save.is_some() && pair.steam_save.is_none() {
-                                ui.colored_label(egui::Color32::YELLOW, "Need Steam location");
-                            }
-                        });
-
-                        ui.end_row();
-                    }
-                });
-        });
-
-        // Display last sync result if available
-        if let Some(ref result) = self.last_sync_result {
-            ui.separator();
-            ui.group(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Last Sync Result:");
-                    ui.label(format!("✅ {} files copied ({})", result.files_copied, result.format_bytes_copied()));
-                    ui.label(format!("at {}", result.sync_time.format("%H:%M:%S")));
-                });
-            });
-        }
-    }
-
     fn draw_cloud_tab(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.heading("☁ Koofr Cloud Sync");
@@ -919,7 +812,7 @@ impl SaveGuardianApp {
                         ui.label("Features:");
                         ui.label("• Automatic save detection");
                         ui.label("• Backup and restore");
-                        ui.label("• Save synchronization");
+                        ui.label("• Cloud sync support");
                         ui.label("• Modern, intuitive interface");
                         ui.add_space(10.0);
                         if ui.button("Close").clicked() {
@@ -950,11 +843,10 @@ impl SaveGuardianApp {
                             
                             ui.add_space(10.0);
                             
-                            // We need to persist the description across frames
-                            let mut description = String::new();
+                            // Use persistent description field
                             ui.horizontal(|ui| {
                                 ui.label("Description:");
-                                ui.text_edit_singleline(&mut description);
+                                ui.text_edit_singleline(&mut self.backup_description);
                             });
                             
                             ui.add_space(10.0);
@@ -962,10 +854,13 @@ impl SaveGuardianApp {
                             ui.horizontal(|ui| {
                                 if ui.button("💾 Create Backup").clicked() {
                                     if let Some(ref backup_manager) = self.backup_manager {
-                                        match backup_manager.create_backup(
-                                            &save_clone,
-                                            if description.is_empty() { None } else { Some(description) }
-                                        ) {
+                                        let description = if self.backup_description.is_empty() { 
+                                            None 
+                                        } else { 
+                                            Some(self.backup_description.clone()) 
+                                        };
+                                        
+                                        match backup_manager.create_backup(&save_clone, description) {
                                             Ok(_) => {
                                                 self.scan_status = ScanStatus::Complete("Backup created successfully".to_string());
                                                 self.load_backups();
@@ -975,10 +870,12 @@ impl SaveGuardianApp {
                                             }
                                         }
                                     }
+                                    self.backup_description.clear();
                                     self.show_backup_dialog = false;
                                 }
                                 
                                 if ui.button("Cancel").clicked() {
+                                    self.backup_description.clear();
                                     self.show_backup_dialog = false;
                                 }
                             });
