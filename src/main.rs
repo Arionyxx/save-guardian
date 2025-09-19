@@ -1,3 +1,6 @@
+// Hide console window on Windows
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod types;
 mod steam;
 mod non_steam;
