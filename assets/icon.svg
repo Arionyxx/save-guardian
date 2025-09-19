@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#2c3e50" stroke="#34495e" stroke-width="4"/>
+  
+  <!-- Shield shape -->
+  <path d="M128 40 L90 60 L90 120 Q90 160 128 200 Q166 160 166 120 L166 60 Z" 
+        fill="#3498db" stroke="#2980b9" stroke-width="2"/>
+  
+  <!-- Cloud icon inside shield -->
+  <path d="M128 90 Q120 80 110 85 Q105 75 95 80 Q85 85 90 95 Q85 100 90 105 L150 105 Q155 100 150 95 Q155 85 145 80 Q135 75 130 85 Q128 80 128 90 Z" 
+        fill="#ffffff" opacity="0.9"/>
+  
+  <!-- Save/disk icon inside shield -->
+  <rect x="118" y="120" width="20" height="16" fill="#ffffff" rx="2"/>
+  <rect x="120" y="122" width="16" height="12" fill="#3498db"/>
+  <rect x="122" y="124" width="12" height="2" fill="#ffffff"/>
+  <rect x="122" y="127" width="12" height="2" fill="#ffffff"/>
+  <rect x="122" y="130" width="12" height="2" fill="#ffffff"/>
+  
+  <!-- Small highlight on shield -->
+  <ellipse cx="120" cy="70" rx="8" ry="15" fill="#ffffff" opacity="0.2"/>
+</svg>
