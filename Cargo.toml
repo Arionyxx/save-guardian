@@ -1,0 +1,53 @@
+[package]
+name = "save-guardian"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name"]
+description = "A sleek save manager for Steam and non-Steam games"
+
+[[bin]]
+name = "save-guardian"
+path = "src/main.rs"
+
+[lib]
+name = "save_guardian"
+path = "src/lib.rs"
+
+[dependencies]
+# GUI Framework
+egui = "0.24"
+eframe = { version = "0.24", features = ["default_fonts", "glow", "persistence"] }
+
+# Serialization and Config
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# File system operations
+walkdir = "2.4"
+zip = "0.6"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# HTTP client for cloud sync
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# System paths
+dirs = "5.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+
+# Icons and styling
+rfd = "0.12" # File dialogs
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.10"
+winapi = { version = "0.3", features = ["winuser"] }
